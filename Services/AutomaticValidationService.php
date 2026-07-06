@@ -3,8 +3,6 @@
 namespace App\Modules\ItTickets\Services;
 
 use App\Models\BasicdataModel;
-use App\Models\EmailLogsModel;
-use App\Models\EmailTemplateModel;
 use App\Models\ItTicketsModel;
 use App\Models\UserModel;
 use CodeIgniter\CLI\CLI;
@@ -21,21 +19,18 @@ class AutomaticValidationService
     private ItTicketsModel $ticketsModel;
     private BasicdataModel $basicdataModel;
     private UserModel $userModel;
-    private EmailTemplateModel $emailTemplateModel;
-    private EmailLogsModel $emailLogsModel;
+    private TicketEmailService $ticketEmailService;
 
     public function __construct(
         ?ItTicketsModel $ticketsModel = null,
         ?BasicdataModel $basicdataModel = null,
         ?UserModel $userModel = null,
-        ?EmailTemplateModel $emailTemplateModel = null,
-        ?EmailLogsModel $emailLogsModel = null
+        ?TicketEmailService $ticketEmailService = null
     ) {
         $this->ticketsModel = $ticketsModel ?? new ItTicketsModel();
         $this->basicdataModel = $basicdataModel ?? new BasicdataModel();
         $this->userModel = $userModel ?? new UserModel();
-        $this->emailTemplateModel = $emailTemplateModel ?? new EmailTemplateModel();
-        $this->emailLogsModel = $emailLogsModel ?? new EmailLogsModel();
+        $this->ticketEmailService = $ticketEmailService ?? new TicketEmailService();
     }
 
     public function run(): bool
@@ -52,46 +47,29 @@ class AutomaticValidationService
 
         $this->cliWrite('IT tickets to validate: ' . $totalSteps, 'green');
 
-        $email = \Config\Services::email();
-        $parser = \Config\Services::parser();
-        $template = $this->getTemplate();
-
         foreach ($tickets as $ticket) {
             $recipients = $this->getRecipients($ticket);
             $subject = 'Automatikus validálás: ' . $ticket['task_number'] . ' munkalap validáció';
-            $html = $parser->setData($this->getTemplateData($ticket))->renderString($template);
 
-            $email->clear();
-            $email->setFrom(self::FROM_EMAIL, self::FROM_NAME);
-            $email->setTo($recipients);
-            $email->setSubject($subject);
-            $email->setMessage($html);
+            $sent = $this->ticketEmailService->sendTemplate(
+                $recipients,
+                null,
+                $subject,
+                self::TEMPLATE_CODE,
+                $this->getTemplateData($ticket),
+                self::FROM_EMAIL,
+                self::FROM_NAME
+            );
 
-            if (!$email->send()) {
+            if (!$sent) {
                 $success = false;
                 $this->cliWrite('Could not send email to: ' . $recipients, 'light_red');
                 $this->cliNewLine();
-
-                $this->emailLogsModel->add(
-                    self::FROM_EMAIL,
-                    $recipients,
-                    $subject,
-                    strip_tags($html),
-                    0
-                );
             } else {
                 $this->ticketsModel->update($ticket['id'], [
                     'is_validated' => 1,
                     'validation_date' => date('Y-m-d H:i:s'),
                 ]);
-
-                $this->emailLogsModel->add(
-                    self::FROM_EMAIL,
-                    $recipients,
-                    $subject,
-                    strip_tags($html),
-                    1
-                );
             }
 
             if (is_cli()) {
@@ -100,15 +78,6 @@ class AutomaticValidationService
         }
 
         return $success;
-    }
-
-    private function getTemplate(): string
-    {
-        $template = $this->emailTemplateModel->getByWhere([
-            'code' => self::TEMPLATE_CODE,
-        ]);
-
-        return $template[0]->data ?? '';
     }
 
     private function getRecipients(array $ticket): string
