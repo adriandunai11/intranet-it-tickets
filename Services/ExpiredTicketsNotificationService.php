@@ -3,8 +3,6 @@
 namespace App\Modules\ItTickets\Services;
 
 use App\Models\BasicdataModel;
-use App\Models\EmailLogsModel;
-use App\Models\EmailTemplateModel;
 use App\Models\ItTicketCategoriesModel;
 use App\Models\ItTicketsModel;
 use App\Models\UserModel;
@@ -21,24 +19,21 @@ class ExpiredTicketsNotificationService
     private ItTicketsModel $ticketsModel;
     private UserModel $userModel;
     private BasicdataModel $basicdataModel;
-    private EmailTemplateModel $emailTemplateModel;
-    private EmailLogsModel $emailLogsModel;
     private ItTicketCategoriesModel $categoryModel;
+    private TicketEmailService $ticketEmailService;
 
     public function __construct(
         ?ItTicketsModel $ticketsModel = null,
         ?UserModel $userModel = null,
         ?BasicdataModel $basicdataModel = null,
-        ?EmailTemplateModel $emailTemplateModel = null,
-        ?EmailLogsModel $emailLogsModel = null,
-        ?ItTicketCategoriesModel $categoryModel = null
+        ?ItTicketCategoriesModel $categoryModel = null,
+        ?TicketEmailService $ticketEmailService = null
     ) {
         $this->ticketsModel = $ticketsModel ?? new ItTicketsModel();
         $this->userModel = $userModel ?? new UserModel();
         $this->basicdataModel = $basicdataModel ?? new BasicdataModel();
-        $this->emailTemplateModel = $emailTemplateModel ?? new EmailTemplateModel();
-        $this->emailLogsModel = $emailLogsModel ?? new EmailLogsModel();
         $this->categoryModel = $categoryModel ?? new ItTicketCategoriesModel();
+        $this->ticketEmailService = $ticketEmailService ?? new TicketEmailService();
     }
 
     public function send(): bool
@@ -57,10 +52,6 @@ class ExpiredTicketsNotificationService
             return true;
         }
 
-        $template = $this->getTemplate();
-        $parser = \Config\Services::parser();
-        $email = \Config\Services::email();
-
         foreach ($groupedTickets as $responsibleId => $areaBuckets) {
             $toEmail = $this->getUserEmail((int) $responsibleId);
             if (!$toEmail) {
@@ -70,31 +61,16 @@ class ExpiredTicketsNotificationService
             foreach ($areaBuckets as $areaId => $tickets) {
                 $areaName = $this->getAreaName((int) $areaId);
                 $ccEmails = $this->getCcEmails((int) $areaId, $toEmail);
-                $html = $parser->setData([
-                    'items' => $this->buildTemplateItems($tickets),
-                ])->renderString($template);
                 $subject = 'MIELL - Lejárt határidejű munkalapjaid (' . $areaName . ')';
 
-                $email->clear();
-                $email->setFrom(self::FROM_EMAIL, self::FROM_NAME);
-                $email->setTo($toEmail);
-
-                if (!empty($ccEmails)) {
-                    $email->setCC($ccEmails);
-                }
-
-                $email->setSubject($subject);
-                $email->setMessage($html);
-
-                $sent = $email->send();
-                $recipients = $this->formatRecipients($toEmail, $ccEmails);
-
-                $this->emailLogsModel->add(
-                    self::FROM_EMAIL,
-                    $recipients,
+                $sent = $this->ticketEmailService->sendTemplate(
+                    $toEmail,
+                    $ccEmails,
                     $subject,
-                    strip_tags($html),
-                    $sent ? 1 : 0
+                    self::TEMPLATE_CODE,
+                    ['items' => $this->buildTemplateItems($tickets)],
+                    self::FROM_EMAIL,
+                    self::FROM_NAME
                 );
 
                 $this->cliWrite(
@@ -123,15 +99,6 @@ class ExpiredTicketsNotificationService
         }
 
         return $grouped;
-    }
-
-    private function getTemplate(): string
-    {
-        $template = $this->emailTemplateModel->getByWhere([
-            'code' => self::TEMPLATE_CODE,
-        ]);
-
-        return $template[0]->data ?? '';
     }
 
     private function getUserEmail(int $userId): ?string
@@ -195,11 +162,6 @@ class ExpiredTicketsNotificationService
         $taskName = esc($ticket['name'] ?? '');
 
         return '<a href="' . self::TICKET_URL . $ticketId . '">' . $taskNumber . ' - ' . $taskName . '</a>';
-    }
-
-    private function formatRecipients(string $toEmail, array $ccEmails): string
-    {
-        return $toEmail . (empty($ccEmails) ? '' : ',' . implode(',', $ccEmails));
     }
 
     private function cliWrite(string $message, string $color = 'white'): void
