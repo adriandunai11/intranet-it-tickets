@@ -1,12 +1,8 @@
 # IT Tickets modul
 
-Ez a repository egy CodeIgniter 4 modul tartalma. A repository gyökere úgy van felépítve, mintha ezt a mappát bemásolnád ide:
+Ez a repository egy CodeIgniter 4 IT ticket modul rendezett kivágata.
 
-```txt
-app/Modules/ItTickets/
-```
-
-## Modul szerkezet
+## Jelenlegi szerkezet
 
 ```txt
 Commands/
@@ -17,26 +13,32 @@ Services/
 Views/
 ```
 
-## Autoload
+## Controller állapot
 
-Az `app/Config/Autoload.php` fájlban legyen felvéve a modul namespace:
+Jelenleg csak egy controller fájl maradt:
 
-```php
-public $psr4 = [
-    APP_NAMESPACE => APPPATH,
-    'App\\Modules\\ItTickets' => APPPATH . 'Modules/ItTickets',
-];
+```txt
+Controllers/It_tickets.php
 ```
 
-## Routes
+A korábbi bridge controller törölve lett:
 
-Az `app/Config/Routes.php` végére kerüljön:
+```txt
+Controllers/ItTicketsController.php
+```
+
+A route-ok átmenetileg közvetlenül erre az egy controllerre mutatnak:
 
 ```php
-if (file_exists(APPPATH . 'Modules/ItTickets/Config/Routes.php')) {
-    require APPPATH . 'Modules/ItTickets/Config/Routes.php';
-}
+$routes->group('it_tickets', [
+    'namespace' => 'App\\Controllers',
+    'filter' => 'auth',
+], static function (RouteCollection $routes): void {
+    $routes->get('/', 'It_tickets::index');
+});
 ```
+
+Ez azért átmeneti, mert a nagy controller teljes modul-namespace alá mozgatásához a teljes fájlt biztonságosan kell átírni. Addig nem maradhat két, egymást öröklő controller.
 
 ## OOP rendezési elv
 
@@ -53,21 +55,7 @@ Az e-mail sablonozás, küldés és e-mail logolás külön e-mail service felad
 Commandból nem hívunk controllert. A command csak service-t hívjon.
 A command mögötti service sem küldhet közvetlenül e-mailt `Config\\Services::email()` vagy saját `EmailLogsModel` használattal; erre a `TicketEmailService` való.
 
-Jó irány:
-
-```php
-(new ExpiredTicketsNotificationService())->send();
-```
-
-Rossz irány:
-
-```php
-It_tickets::expiredTicketsNotification();
-```
-
-## Jelenlegi állapot
-
-Az első folyamatok már service osztályokba kerültek:
+## Elkészült service-ek
 
 ```txt
 Services/ExpiredTicketsNotificationService.php
@@ -101,11 +89,10 @@ TodoTasksReminderService
 AutomaticValidationService
 ```
 
-A modul controller bridge már service-eket használ az ismétlődő ticket generálásnál, automatikus validálásnál, állomány feltöltés/törlésnél, jegyzet létrehozás/törlésnél, terület és felelős módosításnál, valamint státusz módosításnál.
-
 ## Következő bontási célok
 
 ```txt
+It_tickets controller metódusainak célzott service-re kötése
 Ticket view/update/validate folyamatok service-be húzása
 List/datatable query és formatter szétválasztása
 Models namespace-ek fokozatos modul alá rendezése
