@@ -65,13 +65,14 @@ It_tickets::expiredTicketsNotification();
 
 ## Jelenlegi állapot
 
-Az első automata folyamatok már service osztályokba kerültek:
+Az első folyamatok már service osztályokba kerültek:
 
 ```txt
 Services/ExpiredTicketsNotificationService.php
 Services/ExpiringTicketsNotificationService.php
 Services/TodoTasksReminderService.php
 Services/RecurringTicketService.php
+Services/TicketAttachmentService.php
 ```
 
 A hozzájuk tartozó commandok már service-t hívnak:
@@ -83,12 +84,11 @@ Commands/TodoTasksReminder.php
 Commands/GenerateRecurringTickets.php
 ```
 
-A modul controller bridge már a `RecurringTicketService`-t használja az ismétlődő ticket kézi és automata generálásánál.
+A modul controller bridge már a `RecurringTicketService`-t használja az ismétlődő ticket kézi és automata generálásánál, illetve a `TicketAttachmentService`-t a feltöltés/törlés kezelésére.
 
 ## Következő bontási célok
 
 ```txt
 Services/AutomaticValidationService.php
-Services/TicketAttachmentService.php
 Services/TicketCommentService.php
 ```
