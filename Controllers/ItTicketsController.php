@@ -3,6 +3,7 @@
 namespace App\Modules\ItTickets\Controllers;
 
 use App\Models\ItTicketsModel;
+use App\Modules\ItTickets\Services\AutomaticValidationService;
 use App\Modules\ItTickets\Services\RecurringTicketService;
 use App\Modules\ItTickets\Services\TicketAttachmentService;
 use App\Modules\ItTickets\Services\TicketCommentService;
@@ -25,6 +26,11 @@ class ItTicketsController extends \App\Controllers\It_tickets
     public static function generateRecurringTasks(): bool
     {
         return (new RecurringTicketService())->generateDueTasks();
+    }
+
+    public static function automaticValidation(): bool
+    {
+        return (new AutomaticValidationService())->run();
     }
 
     public function testRecurringTasks()
