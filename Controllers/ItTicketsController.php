@@ -8,6 +8,7 @@ use App\Modules\ItTickets\Services\RecurringTicketService;
 use App\Modules\ItTickets\Services\TicketAssignmentService;
 use App\Modules\ItTickets\Services\TicketAttachmentService;
 use App\Modules\ItTickets\Services\TicketCommentService;
+use App\Modules\ItTickets\Services\TicketStatusService;
 
 class ItTicketsController extends \App\Controllers\It_tickets
 {
@@ -90,6 +91,32 @@ class ItTicketsController extends \App\Controllers\It_tickets
             $newAreaId,
             (int) logged('id'),
             (string) logged('name'),
+            (string) logged('antraid')
+        );
+
+        return $this->response->setJSON($result);
+    }
+
+    public function updateTicketStatusAjax()
+    {
+        postAllowed();
+
+        $ticketId = (int) post('id');
+        $status = (string) post('status');
+        $ticket = (new ItTicketsModel())->getById($ticketId);
+        $perm = getTicketPermissions($ticket);
+
+        if (empty($perm['can_change_status'])) {
+            return $this->response->setJSON([
+                'status' => 'error',
+                'message' => 'Nincs jogosultságod státuszt módosítani ezen a jegyen.',
+            ]);
+        }
+
+        $result = (new TicketStatusService())->changeStatus(
+            $ticketId,
+            $status,
+            (int) logged('id'),
             (string) logged('antraid')
         );
 
