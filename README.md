@@ -73,6 +73,7 @@ Services/ExpiringTicketsNotificationService.php
 Services/TodoTasksReminderService.php
 Services/RecurringTicketService.php
 Services/TicketAttachmentService.php
+Services/TicketCommentService.php
 ```
 
 A hozzájuk tartozó commandok már service-t hívnak:
@@ -84,11 +85,10 @@ Commands/TodoTasksReminder.php
 Commands/GenerateRecurringTickets.php
 ```
 
-A modul controller bridge már a `RecurringTicketService`-t használja az ismétlődő ticket kézi és automata generálásánál, illetve a `TicketAttachmentService`-t a feltöltés/törlés kezelésére.
+A modul controller bridge már a `RecurringTicketService`-t használja az ismétlődő ticket kézi és automata generálásánál, a `TicketAttachmentService`-t a feltöltés/törlés kezelésére, illetve a `TicketCommentService`-t a jegyzetek létrehozására/törlésére.
 
 ## Következő bontási célok
 
 ```txt
 Services/AutomaticValidationService.php
-Services/TicketCommentService.php
 ```
