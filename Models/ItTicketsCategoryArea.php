@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Models;
+namespace App\Modules\ItTickets\Models;
 
 use App\Models\BaseModel;
 

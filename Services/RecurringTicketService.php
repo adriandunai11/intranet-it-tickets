@@ -2,8 +2,8 @@
 
 namespace App\Modules\ItTickets\Services;
 
-use App\Models\ItTicketRecurringTaskRunsModel;
-use App\Models\ItTicketRecurringTasksModel;
+use App\Modules\ItTickets\Models\ItTicketRecurringTaskRunsModel;
+use App\Modules\ItTickets\Models\ItTicketRecurringTasksModel;
 use App\Models\UserModel;
 
 class RecurringTicketService
@@ -13,18 +13,18 @@ class RecurringTicketService
     private ItTicketRecurringTasksModel $tasksModel;
     private ItTicketRecurringTaskRunsModel $runsModel;
     private UserModel $userModel;
-    private \App\Services\ItTicketCreator $ticketCreator;
+    private ItTicketCreator $ticketCreator;
 
     public function __construct(
         ?ItTicketRecurringTasksModel $tasksModel = null,
         ?ItTicketRecurringTaskRunsModel $runsModel = null,
         ?UserModel $userModel = null,
-        ?\App\Services\ItTicketCreator $ticketCreator = null
+        ?ItTicketCreator $ticketCreator = null
     ) {
         $this->tasksModel = $tasksModel ?? new ItTicketRecurringTasksModel();
         $this->runsModel = $runsModel ?? new ItTicketRecurringTaskRunsModel();
         $this->userModel = $userModel ?? new UserModel();
-        $this->ticketCreator = $ticketCreator ?? new \App\Services\ItTicketCreator();
+        $this->ticketCreator = $ticketCreator ?? new ItTicketCreator();
     }
 
     public function generateOne(int $taskId, ?string $date = null): array

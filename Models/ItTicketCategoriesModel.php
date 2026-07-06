@@ -1,9 +1,9 @@
 <?php
 
-namespace App\Models;
+namespace App\Modules\ItTickets\Models;
 
 use App\Models\BaseModel;
-use App\Entities\ItTicketCategoriesEntity;
+use App\Modules\ItTickets\Entities\ItTicketCategoriesEntity;
 
 
 class ItTicketCategoriesModel extends BaseModel

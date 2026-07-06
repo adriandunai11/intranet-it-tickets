@@ -1,126 +1,115 @@
 # IT Tickets modul
 
-Ez a repository egy CodeIgniter 4 IT ticket modul rendezett kivágata.
+Ez a csomag már modul-végállapothoz van rendezve: a régi `App\Controllers\It_tickets` controller kiváltható, és a route-ok a modul controllerre mutatnak.
 
-## Jelenlegi szerkezet
-
-```txt
-Commands/
-Config/
-Controllers/
-Models/
-Services/
-Views/
-```
-
-## Controller állapot
-
-Jelenleg egy controller fájl maradt:
+## Bemásolás helye
 
 ```txt
-Controllers/It_tickets.php
+app/Modules/ItTickets/
 ```
 
-A korábbi bridge controller nincs használatban / törölve lett:
+## Autoload
+
+Az `app/Config/Autoload.php` fájlban legyen felvéve:
+
+```php
+public $psr4 = [
+    APP_NAMESPACE => APPPATH,
+    'App\Modules\ItTickets' => APPPATH . 'Modules/ItTickets',
+];
+```
+
+## Routes
+
+Az app fő `app/Config/Routes.php` fájlába elég ezt behúzni:
+
+```php
+if (file_exists(APPPATH . 'Modules/ItTickets/Config/Routes.php')) {
+    require APPPATH . 'Modules/ItTickets/Config/Routes.php';
+}
+```
+
+A modul saját route fájlja már erre mutat:
+
+```txt
+App\Modules\ItTickets\Controllers\ItTicketsController
+```
+
+## Törölhető / kiváltható régi fájlok
+
+Ha a modul mappa a fenti autoloaddal aktív, ezek a régi gyökér fájlok nem kellenek ugyanebből a modulból:
+
+```txt
+app/Controllers/It_tickets.php
+app/Models/ItTicketsModel.php
+app/Models/ItTicketNotesModel.php
+app/Models/ItTicketAttachmentsModel.php
+app/Models/ItTicketCategoriesModel.php
+app/Models/ItTicketsCategoryArea.php
+app/Models/ItTicketRecurringTasksModel.php
+app/Models/ItTicketRecurringTaskRunsModel.php
+app/Entities/ItTicket.php
+app/Entities/ItTicketCategoriesEntity.php
+```
+
+A commandok akkor működnek modulból, ha a CI4 command discovery/autoload látja a modul namespace-t. Ha nálad cron még `app/Commands` alatti osztályokra van kötve, hagyj ott vékony wrapper commandokat, vagy állítsd át a command discovery-t.
+
+## Controller
 
 ```txt
 Controllers/ItTicketsController.php
 ```
 
-A route-ok közvetlenül erre az egy controllerre mutatnak:
-
-```php
-$routes->group('it_tickets', [
-    'namespace' => 'App\\Controllers',
-    'filter' => 'auth',
-], static function (RouteCollection $routes): void {
-    $routes->get('/', 'It_tickets::index');
-});
-```
-
-## OOP rendezési elv
-
-A controller csak HTTP-s belépési pont legyen:
-
-- jogosultság ellenőrzése,
-- request adatok olvasása,
-- service hívása,
-- view / redirect / JSON response visszaadása.
-
-Az üzleti logika service osztályokba kerüljön.
-Az e-mail sablonozás, küldés és e-mail logolás külön e-mail service feladata.
-
-Commandból nem hívunk controllert. A command csak service-t hívjon.
-A command mögötti service sem küldhet közvetlenül e-mailt `Config\\Services::email()` vagy saját `EmailLogsModel` használattal; erre a `TicketEmailService` való.
-
-## Elkészült service-ek
+A korábbi controller neve már nincs használatban:
 
 ```txt
+Controllers/It_tickets.php
+```
+
+## Service-re kötött fő folyamatok
+
+```txt
+selectResponsibleAjax()       -> TicketAssignmentService
+selectAreaAjax()              -> TicketAssignmentService
+updateTicketStatusAjax()      -> TicketStatusService
+addComment()                  -> TicketCommentService
+deleteComment()               -> TicketCommentService
+addAttachment()               -> TicketAttachmentService
+deleteAttachment()            -> TicketAttachmentService
+validateTicket()              -> TicketValidationService
+validateTicketAjax()          -> TicketValidationService
+send() utáni értesítések       -> TicketCreationNotificationService
+plannedTasksReminder()        -> PlannedTasksReminderService
+expiringTicketsNotification() -> ExpiringTicketsNotificationService
+expiredTicketsNotification()  -> ExpiredTicketsNotificationService
+todoTasksReminder()           -> TodoTasksReminderService
+automaticValidation()         -> AutomaticValidationService
+runRecurringTaskNow()         -> RecurringTicketService
+generateRecurringTasks()      -> RecurringTicketService
+testRecurringTasks()          -> RecurringTicketService
+```
+
+## Service-ek
+
+```txt
+Services/AutomaticValidationService.php
 Services/ExpiredTicketsNotificationService.php
 Services/ExpiringTicketsNotificationService.php
-Services/TodoTasksReminderService.php
+Services/ItTicketCreator.php
+Services/PlannedTasksReminderService.php
 Services/RecurringTicketService.php
+Services/TicketAssignmentService.php
 Services/TicketAttachmentService.php
 Services/TicketCommentService.php
-Services/AutomaticValidationService.php
-Services/TicketAssignmentService.php
-Services/TicketStatusService.php
+Services/TicketCreationNotificationService.php
 Services/TicketEmailService.php
+Services/TicketStatusService.php
+Services/TicketValidationService.php
+Services/TodoTasksReminderService.php
 ```
 
-## Controllerből service-re kötött részek
+## Fontos elv
 
-A `Controllers/It_tickets.php` már ezeket a service-eket hívja:
-
-```txt
-selectResponsibleAjax()      -> TicketAssignmentService::changeResponsible()
-selectAreaAjax()             -> TicketAssignmentService::changeArea()
-updateTicketStatusAjax()     -> TicketStatusService::changeStatus()
-addComment()                 -> TicketCommentService::add()
-deleteComment()              -> TicketCommentService::delete()
-addAttachment()              -> TicketAttachmentService::uploadMultiple()
-deleteAttachment()           -> TicketAttachmentService::delete()
-automaticValidation()        -> AutomaticValidationService::run()
-expiringTicketsNotification()-> ExpiringTicketsNotificationService::send()
-expiredTicketsNotification() -> ExpiredTicketsNotificationService::send()
-todoTasksReminder()          -> TodoTasksReminderService::send()
-runRecurringTaskNow()        -> RecurringTicketService::generateOne()
-generateRecurringTasks()     -> RecurringTicketService::generateDueTasks()
-testRecurringTasks()         -> RecurringTicketService::generateDueTasks()
-```
-
-A controller privát `sendEmail()` metódusa is a közös `TicketEmailService`-en keresztül küld.
-
-## Command állapot
-
-A commandok már service-t hívnak:
-
-```txt
-Commands/ExpiredTicketsNotification.php
-Commands/ExpiringTicketsNotification.php
-Commands/TodoTasksReminder.php
-Commands/GenerateRecurringTickets.php
-Commands/ItTicketAutomaticValidation.php
-```
-
-A commandok mögötti e-mailes folyamatok már a közös `TicketEmailService`-en keresztül küldenek:
-
-```txt
-ExpiredTicketsNotificationService
-ExpiringTicketsNotificationService
-TodoTasksReminderService
-AutomaticValidationService
-```
-
-## Ellenőrzés
-
-A módosított PHP fájlok szintaktikailag ellenőrizve lettek `php -l` paranccsal.
-
-## Következő bontási célok
-
-```txt
-Ticket view/update/validate folyamatok külön service-be húzása
-List/datatable query és formatter szétválasztása
-Models namespace-ek fokozatos modul alá rendezése
-Views útvonalak modulnézetekre igazítása
-```
+Controller: HTTP belépési pont.
+Service: üzleti logika.
+TicketEmailService: sablon render, küldés, email log.

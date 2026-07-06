@@ -28,7 +28,7 @@
                 </ol>
             </div>
             <div class="col-sm-12">
-                <h1><?php echo $ticket->task_number . ' ' . model('App\Models\ItTicketCategoriesModel')->getRowById($ticket->category, 'name') . ' - ' . $ticket->name ?>
+                <h1><?php echo $ticket->task_number . ' ' . model('App\Modules\ItTickets\Models\ItTicketCategoriesModel')->getRowById($ticket->category, 'name') . ' - ' . $ticket->name ?>
                 </h1>
                 <p class="mt-3">
                     <?php if ($ticket->status == 'planned'):

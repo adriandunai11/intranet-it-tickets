@@ -90,7 +90,7 @@
                         <div class="input-group col-md-12 col-12 ">
                             <select class="form-control form-control-sm select2" id="category" name="category[]"
                                 data-placeholder="Kategória kiválasztása..." multiple>
-                                <?php foreach (model('App\Models\ItTicketCategoriesModel')->getByWhere(['status' => 'active']) as $row) { ?>
+                                <?php foreach (model('App\Modules\ItTickets\Models\ItTicketCategoriesModel')->getByWhere(['status' => 'active']) as $row) { ?>
                                     <option value="<?php echo $row->id ?>" <?= isset($filters['category']) && in_array($row->id, $filters['category']) ? 'selected' : '' ?>>
                                         <?php echo $row->name ?>
                                     </option>
@@ -644,7 +644,7 @@
 
             <?php if (old('category')): ?>
                 const oldCategoryId = "<?= old('category') ?>";
-                const oldCategoryName = "<?= esc(model('App\Models\ItTicketCategoriesModel')->find(old('category'))->name ?? '') ?>";
+                const oldCategoryName = "<?= esc(model('App\Modules\ItTickets\Models\ItTicketCategoriesModel')->find(old('category'))->name ?? '') ?>";
                 if (oldCategoryId && oldCategoryName) {
                     const option = new Option(oldCategoryName, oldCategoryId, true, true);
                     categorySelect.append(option).trigger('change');

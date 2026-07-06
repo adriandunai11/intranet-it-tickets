@@ -339,8 +339,8 @@ class InboxPullMS extends BaseCommand
 
     private function renameEmlToTicketNumber(int $ticketId): void
     {
-        $ticketModel = new \App\Models\ItTicketsModel();
-        $attachmentModel = new \App\Models\ItTicketAttachmentsModel();
+        $ticketModel = new \App\Modules\ItTickets\Models\ItTicketsModel();
+        $attachmentModel = new \App\Modules\ItTickets\Models\ItTicketAttachmentsModel();
 
         $ticket = $ticketModel->find($ticketId);
         if (!$ticket || empty($ticket->task_number)) {

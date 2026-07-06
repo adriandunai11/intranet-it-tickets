@@ -3,11 +3,9 @@
 namespace App\Modules\ItTickets\Services;
 
 use App\Models\BasicdataModel;
-use App\Models\EmailLogsModel;
-use App\Models\EmailTemplateModel;
-use App\Models\ItTicketCategoriesModel;
-use App\Models\ItTicketNotesModel;
-use App\Models\ItTicketsModel;
+use App\Modules\ItTickets\Models\ItTicketCategoriesModel;
+use App\Modules\ItTickets\Models\ItTicketNotesModel;
+use App\Modules\ItTickets\Models\ItTicketsModel;
 use App\Models\UserModel;
 use CodeIgniter\I18n\Time;
 
@@ -19,8 +17,7 @@ class TicketAssignmentService
     private ItTicketNotesModel $notesModel;
     private BasicdataModel $basicdataModel;
     private UserModel $userModel;
-    private EmailTemplateModel $emailTemplateModel;
-    private EmailLogsModel $emailLogsModel;
+    private TicketEmailService $ticketEmailService;
     private ItTicketCategoriesModel $categoryModel;
 
     public function __construct(
@@ -28,17 +25,15 @@ class TicketAssignmentService
         ?ItTicketNotesModel $notesModel = null,
         ?BasicdataModel $basicdataModel = null,
         ?UserModel $userModel = null,
-        ?EmailTemplateModel $emailTemplateModel = null,
-        ?EmailLogsModel $emailLogsModel = null,
-        ?ItTicketCategoriesModel $categoryModel = null
+        ?ItTicketCategoriesModel $categoryModel = null,
+        ?TicketEmailService $ticketEmailService = null
     ) {
         $this->ticketsModel = $ticketsModel ?? new ItTicketsModel();
         $this->notesModel = $notesModel ?? new ItTicketNotesModel();
         $this->basicdataModel = $basicdataModel ?? new BasicdataModel();
         $this->userModel = $userModel ?? new UserModel();
-        $this->emailTemplateModel = $emailTemplateModel ?? new EmailTemplateModel();
-        $this->emailLogsModel = $emailLogsModel ?? new EmailLogsModel();
         $this->categoryModel = $categoryModel ?? new ItTicketCategoriesModel();
+        $this->ticketEmailService = $ticketEmailService ?? new TicketEmailService();
     }
 
     public function changeResponsible(int $ticketId, int $responsibleId, int $actorId, string $actorAntraId): array
@@ -160,7 +155,6 @@ class TicketAssignmentService
             'created' => new Time('now'),
         ]);
     }
-
     private function sendResponsibleSelectedEmail(object $ticket, int $responsibleId): void
     {
         $data = getEmailShortCodes();
@@ -173,20 +167,14 @@ class TicketAssignmentService
         $data['category'] = ucfirst((string) $this->categoryModel->getRowById($ticket->category, 'name'));
         $data['link'] = self::TICKET_URL . $ticket->id;
 
-        $template = $this->emailTemplateModel->getByWhere([
-            'code' => 'it_tickets_select_responsible',
-        ]);
-
-        $html = \Config\Services::parser()
-            ->setData($data)
-            ->renderString($template[0]->data ?? '');
-
-        $to = $this->userModel->getRowById($responsibleId, 'email');
-        $subject = 'MIELL munkalap: ' . $ticket->task_number;
-
-        $this->sendEmail($to, null, $subject, $html);
+        $this->ticketEmailService->sendTemplate(
+            $this->userModel->getRowById($responsibleId, 'email'),
+            null,
+            'MIELL munkalap: ' . $ticket->task_number,
+            'it_tickets_select_responsible',
+            $data
+        );
     }
-
     private function sendAreaSelectedEmail(object $ticket, array $emails): bool
     {
         $data = getEmailShortCodes();
@@ -198,45 +186,17 @@ class TicketAssignmentService
         $data['category'] = $ticket->categoryName;
         $data['link'] = self::TICKET_URL . $ticket->id;
 
-        $template = $this->emailTemplateModel->getByWhere([
-            'code' => 'it_tickets_it',
-        ]);
-
-        $html = \Config\Services::parser()
-            ->setData($data)
-            ->renderString($template[0]->data ?? '');
-
-        $subject = 'MIELL munkalap: ' . $ticket->task_number;
-
-        return $this->sendEmail($emails, null, $subject, $html);
+        return $this->ticketEmailService->sendTemplate(
+            $emails,
+            null,
+            'MIELL munkalap: ' . $ticket->task_number,
+            'it_tickets_it',
+            $data
+        );
     }
-
     private function sendEmail($to, $cc, string $subject, string $html): bool
     {
-        $email = \Config\Services::email();
-        $email->clear();
-        $email->setFrom(setting('company_email'), setting('company_name'));
-        $email->setTo($to);
-
-        if ($cc) {
-            $email->setCC($cc);
-        }
-
-        $email->setSubject($subject);
-        $email->setMessage($html);
-
-        $sent = $email->send();
-        $recipients = is_array($to) ? implode(',', $to) : (string) $to;
-
-        $this->emailLogsModel->add(
-            setting('company_email'),
-            $recipients,
-            $subject,
-            strip_tags($html),
-            $sent ? 1 : 0
-        );
-
-        return $sent;
+        return $this->ticketEmailService->send($to, $cc, $subject, $html);
     }
 
     private function getUserLabel(int $userId, string $fallbackAntraId): string

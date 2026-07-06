@@ -4,8 +4,8 @@ namespace App\Commands;
 
 use CodeIgniter\CLI\BaseCommand;
 use CodeIgniter\CLI\CLI;
-use App\Models\ItTicketsModel;
-use App\Models\ItTicketNotesModel;
+use App\Modules\ItTickets\Models\ItTicketsModel;
+use App\Modules\ItTickets\Models\ItTicketNotesModel;
 use App\Services\ItTicketInlineImageService;
 
 class ItTicketNormalizeInlineImages extends BaseCommand

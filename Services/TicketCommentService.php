@@ -2,19 +2,19 @@
 
 namespace App\Modules\ItTickets\Services;
 
-use App\Models\ItTicketNotesModel;
+use App\Modules\ItTickets\Models\ItTicketNotesModel;
 
 class TicketCommentService
 {
     private ItTicketNotesModel $notesModel;
-    private \App\Services\ItTicketCreator $ticketCreator;
+    private ItTicketCreator $ticketCreator;
 
     public function __construct(
         ?ItTicketNotesModel $notesModel = null,
-        ?\App\Services\ItTicketCreator $ticketCreator = null
+        ?ItTicketCreator $ticketCreator = null
     ) {
         $this->notesModel = $notesModel ?? new ItTicketNotesModel();
-        $this->ticketCreator = $ticketCreator ?? new \App\Services\ItTicketCreator();
+        $this->ticketCreator = $ticketCreator ?? new ItTicketCreator();
     }
 
     public function add(int $ticketId, string $comment, int $creatorId): bool

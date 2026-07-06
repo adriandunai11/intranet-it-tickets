@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Models;
+namespace App\Modules\ItTickets\Models;
 
 use App\Models\BaseModel;
 use Tatter\Audits\Traits\AuditsTrait;
@@ -16,7 +16,7 @@ class ItTicketsModel extends BaseModel
 
   protected $table = 'it_tickets';
   protected $primaryKey = 'id';
-  protected $returnType = \App\Entities\ItTicket::class;
+  protected $returnType = \App\Modules\ItTickets\Entities\ItTicket::class;
   protected $allowedFields = ['task_number', 'sender_id', 'participants', 'email', 'phone', 'responsible', 'name', 'deadline', 'area', 'description', 'category', 'created_at', 'status', 'todo_date', 'todo_creator', 'project_date', 'project_creator', 'inprogress_date', 'inprogress_creator', 'waiting_date', 'waiting_creator', 'finished_date', 'finished_creator', 'company', 'is_read', 'is_validated', 'validator', 'sent_to_validation', 'validation_date', 'read_date', 'read_by', 'is_programming_plan', 'programming_plan_start', 'programming_plan_end'];
 
 

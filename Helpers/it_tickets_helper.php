@@ -1,6 +1,6 @@
 <?php
 
-use App\Models\ItTicketsModel;
+use App\Modules\ItTickets\Models\ItTicketsModel;
 use App\Models\BasicdataModel;
 use App\Models\UserAreas;
 

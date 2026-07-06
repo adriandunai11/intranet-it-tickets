@@ -2,7 +2,7 @@
 
 namespace App\Modules\ItTickets\Services;
 
-use App\Models\ItTicketAttachmentsModel;
+use App\Modules\ItTickets\Models\ItTicketAttachmentsModel;
 
 class TicketAttachmentService
 {

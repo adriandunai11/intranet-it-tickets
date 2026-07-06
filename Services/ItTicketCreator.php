@@ -1,13 +1,11 @@
 <?php
 
-namespace App\Services;
+namespace App\Modules\ItTickets\Services;
 
-use App\Models\ItTicketsModel;
-use App\Models\ItTicketAttachmentsModel;
-use App\Models\ItTicketNotesModel;
+use App\Modules\ItTickets\Models\ItTicketsModel;
+use App\Modules\ItTickets\Models\ItTicketAttachmentsModel;
+use App\Modules\ItTickets\Models\ItTicketNotesModel;
 use App\Models\UserModel;
-use App\Models\EmailTemplateModel;
-use App\Models\EmailLogsModel;
 use CodeIgniter\I18n\Time;
 
 class ItTicketCreator
@@ -215,14 +213,6 @@ class ItTicketCreator
         $emailData['date'] = new Time('now');
         $emailData['note'] = $comment;
 
-        $parser = \Config\Services::parser();
-
-        $template = (new EmailTemplateModel())->getByWhere([
-            'code' => 'it_tickets_new_note',
-        ])[0]->data;
-
-        $html = $parser->setData($emailData)->renderString($template);
-
         $responsibleEmail = '';
 
         if ((int) $ticket->responsible !== (int) $ticket->sender_id) {
@@ -230,43 +220,23 @@ class ItTicketCreator
         }
 
         $cc = trim($emailsString . ($responsibleEmail ? ', ' . $responsibleEmail : ''), ', ');
-
-        $this->sendEmail(
+        (new TicketEmailService())->sendTemplate(
             $ticket->email,
-            $cc ?: false,
+            $cc ?: null,
             'MIELL munkalap: ' . $ticket->task_number . ' - új jegyzet',
-            $html
+            'it_tickets_new_note',
+            $emailData
         );
 
         return true;
     }
-
     private function sendEmail($to, $cc = false, string $subject, string $html): void
     {
         if (!$to || !$subject || !$html) {
             return;
         }
 
-        $email = \Config\Services::email();
-        $email->setFrom(\setting('company_email'), \setting('company_name'));
-        $email->setTo($to);
-
-        if ($cc) {
-            $email->setCC($cc);
-        }
-
-        $email->setSubject($subject);
-        $email->setMessage($html);
-
-        $sent = $email->send();
-
-        (new EmailLogsModel())->add(
-            \setting('company_email'),
-            $to,
-            $subject,
-            \strip_tags($html),
-            $sent ? 1 : 0
-        );
+        (new TicketEmailService())->send($to, $cc ?: null, $subject, $html);
     }
 
     private function createSystemNote($ticketId, $note): void

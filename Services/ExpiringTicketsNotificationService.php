@@ -3,8 +3,8 @@
 namespace App\Modules\ItTickets\Services;
 
 use App\Models\BasicdataModel;
-use App\Models\ItTicketCategoriesModel;
-use App\Models\ItTicketsModel;
+use App\Modules\ItTickets\Models\ItTicketCategoriesModel;
+use App\Modules\ItTickets\Models\ItTicketsModel;
 use App\Models\UserModel;
 use CodeIgniter\CLI\CLI;
 

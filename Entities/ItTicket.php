@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Entities;
+namespace App\Modules\ItTickets\Entities;
 
 use CodeIgniter\Entity\Entity;
 use App\Entities\BaseEntity;
@@ -44,7 +44,7 @@ class ItTicket extends BaseEntity
             return 'Nincs megadva';
         }
 
-        $catModel = new \App\Models\ItTicketCategoriesModel();
+        $catModel = new \App\Modules\ItTickets\Models\ItTicketCategoriesModel();
         $cat = $catModel->find($this->attributes['category']);
 
         return $cat->name ?? 'Ismeretlen kategória';

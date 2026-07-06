@@ -1,38 +1,40 @@
 <?php
-namespace App\Controllers;
+namespace App\Modules\ItTickets\Controllers;
 
 use App\Controllers\AdminBaseController;
 
-use App\Models\ItTicketCategoriesModel;
-use App\Models\ItTicketsModel;
-use App\Models\ItTicketNotesModel;
-use App\Models\ItTicketAttachmentsModel;
+use App\Modules\ItTickets\Models\ItTicketCategoriesModel;
+use App\Modules\ItTickets\Models\ItTicketsModel;
+use App\Modules\ItTickets\Models\ItTicketNotesModel;
+use App\Modules\ItTickets\Models\ItTicketAttachmentsModel;
 
-use App\Models\EmailTemplateModel;
 use App\Models\UserAreas;
 use CodeIgniter\CLI\CLI;
 use CodeIgniter\I18n\Time;
 use App\Models\UserModel;
 use App\Models\BasicdataModel;
-use App\Models\EmailLogsModel;
 
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Hermawan\DataTables\DataTable;
-use App\Models\ItTicketRecurringTasksModel;
-use App\Models\ItTicketRecurringTaskRunsModel;
+use App\Modules\ItTickets\Models\ItTicketRecurringTasksModel;
+use App\Modules\ItTickets\Models\ItTicketRecurringTaskRunsModel;
 use App\Modules\ItTickets\Services\AutomaticValidationService;
 use App\Modules\ItTickets\Services\ExpiredTicketsNotificationService;
 use App\Modules\ItTickets\Services\ExpiringTicketsNotificationService;
-use App\Modules\ItTickets\Services\TodoTasksReminderService;
+use App\Modules\ItTickets\Services\ItTicketCreator;
+use App\Modules\ItTickets\Services\PlannedTasksReminderService;
 use App\Modules\ItTickets\Services\RecurringTicketService;
 use App\Modules\ItTickets\Services\TicketAssignmentService;
 use App\Modules\ItTickets\Services\TicketAttachmentService;
 use App\Modules\ItTickets\Services\TicketCommentService;
+use App\Modules\ItTickets\Services\TicketCreationNotificationService;
 use App\Modules\ItTickets\Services\TicketEmailService;
 use App\Modules\ItTickets\Services\TicketStatusService;
+use App\Modules\ItTickets\Services\TicketValidationService;
+use App\Modules\ItTickets\Services\TodoTasksReminderService;
 
-class It_tickets extends AdminBaseController
+class ItTicketsController extends AdminBaseController
 {
     public $title = 'Miell Group Bejelentések';
     public $menu = 'it_tickets';
@@ -608,30 +610,27 @@ class It_tickets extends AdminBaseController
 
         return $this->response->setJSON(['ok' => true, 'list' => $results]);
     }
-
     public function send()
     {
         $this->permissionCheck('create_it_ticket');
-
         postAllowed();
 
-        $validation = \Config\Services::validation();
-
-        if (
-            !$this->validate([
-                'task_name' => 'required',
-                'area' => 'required',
-                'category' => 'required',
-                'files' => [
-                    'max_size[files,25600]',
-                ]
-            ])
-        ) {
-            return redirect()->to('/it_tickets')->withInput()->with('validation', $this->validator->getErrors());
+        if (!$this->validate([
+            'task_name' => 'required',
+            'area' => 'required',
+            'category' => 'required',
+            'files' => [
+                'max_size[files,25600]',
+            ],
+        ])) {
+            return redirect()->to('/it_tickets')
+                ->withInput()
+                ->with('validation', $this->validator->getErrors());
         }
 
         try {
-            $creator = new \App\Services\ItTicketCreator();
+            $creator = new ItTicketCreator();
+            $participants = post('participants') ?: [];
 
             $id = $creator->create([
                 'sender_id' => logged('id'),
@@ -645,71 +644,33 @@ class It_tickets extends AdminBaseController
                 'description' => post('description'),
                 'validator' => logged('id'),
                 'created_at' => date('Y-m-d H:i:s'),
-                'participants' => post('participants') ?: []
+                'participants' => $participants,
             ], $this->request->getFileMultiple('files') ?: []);
 
+            (new TicketCreationNotificationService())->notifyCreated($id, [
+                'sender_name' => logged('name'),
+                'sender_email' => logged('email'),
+                'sender_phone' => logged('phone'),
+                'task_name' => post('task_name'),
+                'description' => post('description'),
+                'category' => post('category'),
+                'area' => post('area'),
+                'participants' => $participants,
+            ]);
+
+            $ticketRow = (new ItTicketsModel())->find($id);
+            $taskNumber = $ticketRow->task_number ?? '';
+
+            model('App\Models\ActivityLogModel')->add(
+                logged('name') . ' (#' . logged('id') . ') bejelentést küldött az IT ürlapon keresztül. Bejelentés azonosító: ' . $id
+            );
+
+            return redirect()->to('it_tickets')
+                ->with('sSuccess', 'A bejelentésed sikeresen rögzítettük ' . $taskNumber . ' számon.');
         } catch (\Throwable $e) {
             log_message('error', 'Ticket create failed: ' . $e->getMessage());
-            return redirect()->to('it_tickets')->with('sError', 'Valami hiba történt. Kérlek, hogy jelezd az IT osztály felé.');
-        }
-
-        $ticketRow = (new ItTicketsModel)->find($id);
-        $task_number = $ticketRow->task_number ?? '';
-
-        $data = getEmailShortCodes();
-        $data['name'] = logged('name');
-        $data['email'] = logged('email');
-        $data['phone'] = logged('phone');
-        $data['subject'] = post('task_name');
-        $data['task_number'] = '<a href="https://intranet.miellgroup.com/it_tickets/view/' . $id . '">' . $task_number . '</a>';
-        $data['description'] = post('description');
-        $data['category'] = ucfirst(model('App\Models\ItTicketCategoriesModel')->getRowById(post('category'), 'name'));
-        $data['area'] = model('App\Models\BasicdataModel')->getRowById(post('area'), 'name');
-        $area_emails = model('App\Models\BasicdataModel')->getRowById(post('area'), 'email');
-        $parser = \Config\Services::parser();
-
-        $template = (new EmailTemplateModel)->getByWhere([
-            'code' => 'it_tickets_it'
-        ])[0]->data;
-
-        $html = $parser->setData($data)->renderString($template);
-        foreach ($area_emails as $row) {
-            $this->sendEmail($row, false, 'MIELL munkalap: ' . $task_number, $html);
-        }
-
-        $template = (new EmailTemplateModel)->getByWhere([
-            'code' => 'it_tickets_sender'
-        ])[0]->data;
-
-        $html = $parser->setData($data)->renderString($template);
-
-        $participants = post('participants');
-        if ($participants && is_array($participants)) {
-            $userModel = new UserModel;
-
-            $users = $userModel->whereIn('id', $participants)->findAll();
-
-            if (empty($users)) {
-                log_message('error', 'Nincsenek találatok a következő ID-kra: ' . implode(',', $participants));
-            } else {
-                $emails = array_map(function ($user) {
-                    return $user->email;
-                }, $users);
-
-                $emailsString = implode(',', $emails);
-            }
-        } else {
-            $emailsString = '';
-        }
-
-        $this->sendEmail(logged('email'), $emailsString, 'MIELL munkalap: ' . $task_number, $html);
-
-        model('App\Models\ActivityLogModel')->add(logged('name') . ' (#' . logged('id') . ') bejelentést küldött az IT ürlapon keresztül. Bejelentés azonosító: ' . $id);
-
-        if ($id) {
-            return redirect()->to('it_tickets')->with('sSuccess', 'A bejelentésed sikeresen rögzítettük ' . $task_number . ' számon.');
-        } else {
-            return redirect()->to('it_tickets')->with('sError', 'Valami hiba történt. Kérlek, hogy jelezd az IT osztály felé.');
+            return redirect()->to('it_tickets')
+                ->with('sError', 'Valami hiba történt. Kérlek, hogy jelezd az IT osztály felé.');
         }
     }
 
@@ -845,7 +806,6 @@ class It_tickets extends AdminBaseController
         return $this->response->setJSON($result);
     }
 
-
     public function view($id)
     {
 
@@ -898,284 +858,58 @@ class It_tickets extends AdminBaseController
             return redirect()->to('it_tickets/view/' . $id)->with('sError', 'Valami hiba történt. Kérlek, hogy jelezd az IT osztály felé.');
         }
     }
-
     public function validateTicket($id)
     {
-        $ticket = (new ItTicketsModel)->getById($id);
-
-        $perm = getTicketPermissions($ticket->id);
-
-
-        postAllowed();
-        if ($ticket) {
-            $validated = post('status');
-            if ($perm['can_validate']) {
-                if (post('status') == 1) {
-                    $update = (new ItTicketsModel)->update($id, [
-                        "is_validated" => 1,
-                        "validation_date" => new Time('now'),
-                    ]);
-
-                    $email_data = getEmailShortCodes();
-                    $email_data['name'] = model('App\Models\UserModel')->getRowById($ticket->responsible, 'name');
-
-                    $email_data['sender'] = model('App\Models\UserModel')->getRowById($ticket->sender_id, 'name') . ' (' . model('App\Models\UserModel')->getRowById($ticket->sender_id, 'antraid') . ')';
-
-                    $email_data['task_number'] = '<a href="https://intranet.miellgroup.com/it_tickets/view/' . $ticket->id . '">' . $ticket->task_number . ' - ' . $ticket->name . '</a>';
-
-                    $email_data['comment'] = post('validateComment');
-
-
-                    $parser = \Config\Services::parser();
-
-                    $template = (new EmailTemplateModel)->getByWhere([
-                        'code' => 'it_ticket_validate'
-                    ])[0]->data;
-
-                    $html = $parser->setData($email_data)->renderString($template);
-
-
-
-                    $this->sendEmail(model('App\Models\UserModel')->getRowById($ticket->responsible, 'email'), false, 'MIELL munkalap: ' . $ticket->task_number . ' - validált', $html);
-
-                } else {
-                    $update = (new ItTicketsModel)->update($id, [
-                        "is_validated" => 0,
-                        "validation_date" => null,
-                        'status' => 'inprogress'
-                    ]);
-
-                    $email_data = getEmailShortCodes();
-                    $email_data['name'] = model('App\Models\UserModel')->getRowById($ticket->responsible, 'name');
-                    $email_data['sender'] = model('App\Models\UserModel')->getRowById($ticket->sender_id, 'name') . ' (' . model('App\Models\UserModel')->getRowById($ticket->sender_id, 'antraid') . ')';
-
-                    $email_data['task_number'] = '<a href="https://intranet.miellgroup.com/it_tickets/view/' . $ticket->id . '">' . $ticket->task_number . ' - ' . $ticket->name . '</a>';
-
-                    $email_data['comment'] = post('validateComment');
-
-
-                    $parser = \Config\Services::parser();
-
-                    $template = (new EmailTemplateModel)->getByWhere([
-                        'code' => 'it_ticket_no_validate'
-                    ])[0]->data;
-
-                    $html = $parser->setData($email_data)->renderString($template);
-
-                    $areaResponsibleId = (new BasicdataModel)->getRowById($ticket->area, 'responsible');
-                    $areaResponsibleEmail = (new UserModel)->getRowById($areaResponsibleId, 'email');
-
-                    $this->sendEmail($areaResponsibleEmail, model('App\Models\UserModel')->getRowById($ticket->responsible, 'email'), 'MIELL munkalap: ' . $ticket->task_number . ' - nem validált', $html);
-                }
-                if (!empty(post('validateComment'))) {
-
-                    if ($validated == 1) {
-                        $validationStatus = 'Igen';
-                    } else {
-                        $validationStatus = 'Nem';
-                    }
-
-                    $text = 'Validáció: ' . $validationStatus . '<br>Validáció megjegyzése: ' . post('validateComment');
-                    $data = [
-                        'ticket_id' => $ticket->id,
-                        'note' => $text,
-                        'creator' => 0,
-                        'created' => new Time('now')
-                    ];
-
-                    (new ItTicketNotesModel)->create($data);
-                }
-                return redirect()->to('it_tickets/view/' . $id)->with('sSuccess', 'Sikeres validálás.');
-            } else {
-                $this->response->redirect('/errors/denied');
-
-            }
-        } else {
+        $ticket = (new ItTicketsModel())->getById((int) $id);
+        if (!$ticket) {
             return redirect()->to('it_tickets');
         }
-    }
 
+        $perm = getTicketPermissions($ticket->id);
+        postAllowed();
+
+        if (empty($perm['can_validate'])) {
+            return $this->response->redirect('/errors/denied');
+        }
+
+        $result = (new TicketValidationService())->validate(
+            (int) $id,
+            (int) post('status') === 1,
+            post('validateComment')
+        );
+
+        return redirect()->to('it_tickets/view/' . $id)
+            ->with($result['status'] ? 'sSuccess' : 'sError', $result['message']);
+    }
     public function validateTicketAjax()
     {
         postAllowed();
-        $model = new ItTicketsModel();
 
-        $id = post('ticketIdValidation');
-        $ticket = (new ItTicketsModel)->getById($id);
-        $perm = getTicketPermissions($ticket->id);
-
-        if ($ticket) {
-            if ($perm['can_validate']) {
-                $data = [
-                    "is_validated" => post('validatedText'),
-                    "validation_date" => new Time('now'),
-                ];
-
-                if (post('validatedText') == 1) {
-                    $email_data = getEmailShortCodes();
-                    $email_data['name'] = model('App\Models\UserModel')->getRowById($ticket->responsible, 'name');
-
-                    $email_data['sender'] = model('App\Models\UserModel')->getRowById($ticket->sender_id, 'name') . ' (' . model('App\Models\UserModel')->getRowById($ticket->sender_id, 'antraid') . ')';
-
-                    $email_data['task_number'] = '<a href="https://intranet.miellgroup.com/it_tickets/view/' . $ticket->id . '">' . $ticket->task_number . ' - ' . $ticket->name . '</a>';
-
-                    $email_data['comment'] = post('validateComment');
-
-
-                    $parser = \Config\Services::parser();
-
-                    $template = (new EmailTemplateModel)->getByWhere([
-                        'code' => 'it_ticket_validate'
-                    ])[0]->data;
-
-                    $html = $parser->setData($email_data)->renderString($template);
-
-                    $this->sendEmail(model('App\Models\UserModel')->getRowById($ticket->responsible, 'email'), false, 'MIELL munkalap: ' . $ticket->task_number . ' - validált', $html);
-                } else {
-                    $email_data = getEmailShortCodes();
-                    $email_data['name'] = model('App\Models\UserModel')->getRowById($ticket->responsible, 'name');
-                    $email_data['sender'] = model('App\Models\UserModel')->getRowById($ticket->sender_id, 'name') . ' (' . model('App\Models\UserModel')->getRowById($ticket->sender_id, 'antraid') . ')';
-
-                    $email_data['task_number'] = '<a href="https://intranet.miellgroup.com/it_tickets/view/' . $ticket->id . '">' . $ticket->task_number . ' - ' . $ticket->name . '</a>';
-
-                    $email_data['comment'] = post('validateComment');
-                    $data['status'] = 'inprogress';
-
-                    $parser = \Config\Services::parser();
-
-                    $template = (new EmailTemplateModel)->getByWhere([
-                        'code' => 'it_ticket_no_validate'
-                    ])[0]->data;
-
-                    $html = $parser->setData($email_data)->renderString($template);
-
-                    $areaResponsibleId = (new BasicdataModel)->getRowById($ticket->area, 'responsible');
-                    $areaResponsibleEmail = (new UserModel)->getRowById($areaResponsibleId, 'email');
-
-                    $this->sendEmail($areaResponsibleEmail, model('App\Models\UserModel')->getRowById($ticket->responsible, 'email'), 'MIELL munkalap: ' . $ticket->task_number . ' - nem validált', $html);
-                }
-
-                if (!empty(post('validateComment'))) {
-
-                    if (post('validatedText') == 1) {
-                        $validationStatus = 'Igen';
-                    } else {
-                        $validationStatus = 'Nem';
-                    }
-
-                    $text = 'Validáció: ' . $validationStatus . '<br>Validáció megjegyzése: ' . post('validateComment');
-                    $this->createSystemNote($ticket->id, $text);
-                }
-
-
-                $update = $model->update($id, $data);
-
-                if ($update != false) {
-                    $data = $model->where('id', $id)->first();
-                    return json_encode(array("status" => true, 'data' => $data));
-
-                } else {
-                    return json_encode(array("status" => false, 'data' => $data));
-                }
-            }
+        $id = (int) post('ticketIdValidation');
+        $ticket = (new ItTicketsModel())->getById($id);
+        if (!$ticket) {
+            return $this->response->setJSON(['status' => false, 'data' => null]);
         }
+
+        $perm = getTicketPermissions($ticket->id);
+        if (empty($perm['can_validate'])) {
+            return $this->response->setJSON(['status' => false, 'data' => null]);
+        }
+
+        $result = (new TicketValidationService())->validate(
+            $id,
+            (int) post('validatedText') === 1,
+            post('validateComment')
+        );
+
+        return $this->response->setJSON([
+            'status' => $result['status'],
+            'data' => $result['data'],
+        ]);
     }
-
-
     public static function plannedTasksReminder()
     {
-        $ticketsModel = new ItTicketsModel();
-        $userModel = new UserModel();
-        $basicdataModel = new BasicdataModel();
-        $emailTemplateModel = new EmailTemplateModel();
-        $emailLogsModel = new EmailLogsModel();
-
-        $plannedTickets = $ticketsModel->getPlannedTasks('planned', '-1 day');
-        if (empty($plannedTickets)) {
-            if (is_cli()) {
-                CLI::write('Planned tickets: 0', 'yellow');
-            }
-            return true;
-        }
-
-        $byArea = [];
-        foreach ($plannedTickets as $row) {
-            $areaId = (int) ($row['area'] ?? 0);
-            if ($areaId <= 0) {
-                continue;
-            }
-            $byArea[$areaId][] = $row;
-        }
-
-        if (is_cli()) {
-            CLI::write('Planned tickets (grouped areas): ' . count($byArea), 'green');
-        }
-
-        $parser = \Config\Services::parser();
-        $template = $emailTemplateModel->getByWhere(['code' => 'it_tickets_reminder_planned_tasks'])[0]->data;
-
-        $email = \Config\Services::email();
-
-        foreach ($byArea as $areaId => $tickets) {
-            $responsibleId = (int) ($basicdataModel->getRowById($areaId, 'responsible') ?? 0);
-            if ($responsibleId <= 0) {
-                if (is_cli()) {
-                    CLI::write("Area #{$areaId}: nincs felelős beállítva.", 'red');
-                }
-                continue;
-            }
-
-            $toEmail = $userModel->getRowById($responsibleId, 'email');
-            if (!is_string($toEmail) || !filter_var($toEmail, FILTER_VALIDATE_EMAIL)) {
-                if (is_cli()) {
-                    CLI::write("Area #{$areaId}: a felelősnek nincs érvényes e-mail címe.", 'red');
-                }
-                continue;
-            }
-
-            $listHtml = '<ul>';
-            foreach ($tickets as $r) {
-                $ticketId = (int) $r['id'];
-                $taskNumber = $r['task_number'] ?? '';
-                $taskName = $r['name'] ?? '';
-                $listHtml .= '<li><a href="https://intranet.miellgroup.com/it_tickets/view/' . $ticketId . '">'
-                    . $taskNumber . ' - ' . esc($taskName)
-                    . '</a></li>';
-            }
-            $listHtml .= '</ul>';
-
-            $areaName = (string) ($basicdataModel->getRowById($areaId, 'name') ?? '');
-            $emailData = [
-                'list' => $listHtml,
-                'area' => $areaName,
-            ];
-
-            $html = $parser->setData($emailData)->renderString($template);
-            $subject = 'MIELL - ki nem osztott munkalapok: ' . ($areaName !== '' ? $areaName : ('Terület #' . $areaId));
-
-            $email->clear();
-            $email->setFrom('intranet@miellgroup.com', 'MIELL Group - Intranet');
-            $email->setTo($toEmail);
-            $email->setSubject($subject);
-            $email->setMessage($html);
-
-            $sent = $email->send();
-
-            $emailLogsModel->add(
-                'intranet@miellgroup.com',
-                $toEmail,
-                $subject,
-                strip_tags($html),
-                $sent ? 1 : 0
-            );
-
-            if (is_cli()) {
-                $color = $sent ? 'green' : 'red';
-                CLI::write("Area #{$areaId} ({$areaName}) → {$toEmail}", $color);
-            }
-        }
-
-        return true;
+        return (new PlannedTasksReminderService())->send();
     }
     public static function expiringTicketsNotification()
     {
@@ -1185,14 +919,12 @@ class It_tickets extends AdminBaseController
     {
         return (new ExpiredTicketsNotificationService())->send();
     }
-
     public function addComment($ticket_id)
     {
         $this->permissionCheck('create_it_ticket');
 
         $ticketId = (int) $ticket_id;
         $ticket = (new ItTicketsModel())->getById($ticketId);
-
         if (!$ticket) {
             return redirect()->to('it_tickets');
         }
@@ -1215,15 +947,12 @@ class It_tickets extends AdminBaseController
                 return redirect()->to('it_tickets/view/' . $ticketId)
                     ->with('sSuccess', 'Jegyzet sikeresen létrehozva.');
             }
-
-            return redirect()->to('it_tickets/view/' . $ticketId)
-                ->with('sError', 'Valami hiba történt. Kérlek, hogy jelezd az IT osztály felé.');
         } catch (\Throwable $e) {
             log_message('error', 'Ticket comment create failed: ' . $e->getMessage());
-
-            return redirect()->to('it_tickets/view/' . $ticketId)
-                ->with('sError', 'Valami hiba történt. Kérlek, hogy jelezd az IT osztály felé.');
         }
+
+        return redirect()->to('it_tickets/view/' . $ticketId)
+            ->with('sError', 'Valami hiba történt. Kérlek, hogy jelezd az IT osztály felé.');
     }
     public function deleteComment($id)
     {
@@ -1242,13 +971,8 @@ class It_tickets extends AdminBaseController
         $result = $service->delete($noteId);
         $ticketId = (int) ($result['ticket_id'] ?? $note->ticket_id);
 
-        if ($result['status']) {
-            return redirect()->to('it_tickets/view/' . $ticketId)
-                ->with('sSuccess', $result['message']);
-        }
-
         return redirect()->to('it_tickets/view/' . $ticketId)
-            ->with('sError', 'Valami hiba történt. Kérlek, hogy jelezd az IT osztály felé.');
+            ->with($result['status'] ? 'sSuccess' : 'sError', $result['status'] ? $result['message'] : 'Valami hiba történt. Kérlek, hogy jelezd az IT osztály felé.');
     }
     public function addAttachment($ticket_id)
     {
@@ -1272,20 +996,14 @@ class It_tickets extends AdminBaseController
                 ->with('validation_add_attachment', $this->validator->getErrors());
         }
 
-        $files = $this->request->getFileMultiple('files');
         $uploaded = (new TicketAttachmentService())->uploadMultiple(
             $ticketId,
-            $files ?: [],
+            $this->request->getFileMultiple('files') ?: [],
             (int) logged('id')
         );
 
-        if ($uploaded) {
-            return redirect()->to('it_tickets/view/' . $ticketId)
-                ->with('sSuccess', 'Sikeres állomány feltöltés.');
-        }
-
         return redirect()->to('it_tickets/view/' . $ticketId)
-            ->with('sError', 'Valami hiba történt. Kérlek, hogy jelezd az IT osztály felé.');
+            ->with($uploaded ? 'sSuccess' : 'sError', $uploaded ? 'Sikeres állomány feltöltés.' : 'Valami hiba történt. Kérlek, hogy jelezd az IT osztály felé.');
     }
     public function deleteAttachment($id)
     {
@@ -1304,13 +1022,8 @@ class It_tickets extends AdminBaseController
         $result = $service->delete($attachmentId);
         $ticketId = (int) ($result['ticket_id'] ?? $attachment->ticket_id);
 
-        if ($result['status']) {
-            return redirect()->to('it_tickets/view/' . $ticketId)
-                ->with('sSuccess', $result['message']);
-        }
-
         return redirect()->to('it_tickets/view/' . $ticketId)
-            ->with('sError', 'Valami hiba történt. Kérlek, hogy jelezd az IT osztály felé.');
+            ->with($result['status'] ? 'sSuccess' : 'sError', $result['status'] ? $result['message'] : 'Valami hiba történt. Kérlek, hogy jelezd az IT osztály felé.');
     }
     private function sendEmail($to, $cc = false, $subject, $html)
     {
@@ -1318,7 +1031,6 @@ class It_tickets extends AdminBaseController
             (new TicketEmailService())->send($to, $cc ?: null, $subject, $html);
         }
     }
-
 
     private function createSystemNote($ticket_id, $note)
     {
@@ -1340,7 +1052,6 @@ class It_tickets extends AdminBaseController
     {
         return (new TodoTasksReminderService())->send();
     }
-
 
     function getParticipantsNamesAndAntraid($participants)
     {
@@ -1754,7 +1465,7 @@ class It_tickets extends AdminBaseController
             : [];
 
         $data['area_name'] = model('App\Models\BasicdataModel')->getRowById($data['area'], 'name');
-        $data['category_name'] = model('App\Models\ItTicketCategoriesModel')->getRowById($data['category'], 'name');
+        $data['category_name'] = model('App\Modules\ItTickets\Models\ItTicketCategoriesModel')->getRowById($data['category'], 'name');
 
         return $this->response->setJSON([
             'status' => true,
@@ -1877,7 +1588,6 @@ class It_tickets extends AdminBaseController
     {
         return (new RecurringTicketService())->generateDueTasks();
     }
-
     private static function renderRecurringTemplate(string $template, string $date): string
     {
         $timestamp = strtotime($date);
@@ -1917,6 +1627,5 @@ class It_tickets extends AdminBaseController
 
         return redirect()->to('it_tickets')->with('sSuccess', 'Ismétlődő feladatok generálása lefutott.');
     }
-
 }
 

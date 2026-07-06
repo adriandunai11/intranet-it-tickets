@@ -2,8 +2,8 @@
 
 namespace App\Modules\ItTickets\Services;
 
-use App\Models\ItTicketNotesModel;
-use App\Models\ItTicketsModel;
+use App\Modules\ItTickets\Models\ItTicketNotesModel;
+use App\Modules\ItTickets\Models\ItTicketsModel;
 use App\Models\UserModel;
 use CodeIgniter\I18n\Time;
 

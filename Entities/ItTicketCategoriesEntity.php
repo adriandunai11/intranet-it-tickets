@@ -1,5 +1,5 @@
 <?php
-namespace App\Entities;
+namespace App\Modules\ItTickets\Entities;
 
 use CodeIgniter\Entity\Entity;
 use App\Models\BasicdataModel;
