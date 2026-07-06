@@ -65,24 +65,27 @@ It_tickets::expiredTicketsNotification();
 
 ## Jelenlegi állapot
 
-Az első kiemelt OOP service:
+Az első automata folyamatok már service osztályokba kerültek:
 
 ```txt
 Services/ExpiredTicketsNotificationService.php
+Services/ExpiringTicketsNotificationService.php
+Services/TodoTasksReminderService.php
 ```
 
-A command már ezt hívja:
+A hozzájuk tartozó commandok már ezeket hívják:
 
 ```txt
 Commands/ExpiredTicketsNotification.php
+Commands/ExpiringTicketsNotification.php
+Commands/TodoTasksReminder.php
 ```
 
-A következő bontási célok:
+## Következő bontási célok
 
 ```txt
-Services/ExpiringTicketsNotificationService.php
-Services/TodoTasksReminderService.php
 Services/AutomaticValidationService.php
 Services/RecurringTicketService.php
 Services/TicketAttachmentService.php
+Services/TicketCommentService.php
 ```
