@@ -3,8 +3,6 @@
 namespace App\Modules\ItTickets\Services;
 
 use App\Models\BasicdataModel;
-use App\Models\EmailLogsModel;
-use App\Models\EmailTemplateModel;
 use App\Models\ItTicketsModel;
 use App\Models\UserModel;
 use CodeIgniter\CLI\CLI;
@@ -21,21 +19,18 @@ class TodoTasksReminderService
     private ItTicketsModel $ticketsModel;
     private UserModel $userModel;
     private BasicdataModel $basicdataModel;
-    private EmailTemplateModel $emailTemplateModel;
-    private EmailLogsModel $emailLogsModel;
+    private TicketEmailService $ticketEmailService;
 
     public function __construct(
         ?ItTicketsModel $ticketsModel = null,
         ?UserModel $userModel = null,
         ?BasicdataModel $basicdataModel = null,
-        ?EmailTemplateModel $emailTemplateModel = null,
-        ?EmailLogsModel $emailLogsModel = null
+        ?TicketEmailService $ticketEmailService = null
     ) {
         $this->ticketsModel = $ticketsModel ?? new ItTicketsModel();
         $this->userModel = $userModel ?? new UserModel();
         $this->basicdataModel = $basicdataModel ?? new BasicdataModel();
-        $this->emailTemplateModel = $emailTemplateModel ?? new EmailTemplateModel();
-        $this->emailLogsModel = $emailLogsModel ?? new EmailLogsModel();
+        $this->ticketEmailService = $ticketEmailService ?? new TicketEmailService();
     }
 
     public function send(): bool
@@ -54,10 +49,6 @@ class TodoTasksReminderService
             return true;
         }
 
-        $template = $this->getTemplate();
-        $parser = \Config\Services::parser();
-        $email = \Config\Services::email();
-
         foreach ($groupedTickets as $responsibleId => $areaBuckets) {
             $toEmail = $this->getUserEmail((int) $responsibleId);
             if (!$toEmail) {
@@ -67,32 +58,19 @@ class TodoTasksReminderService
             foreach ($areaBuckets as $areaId => $tickets) {
                 $areaName = $this->getAreaName((int) $areaId);
                 $ccEmails = $this->getCcEmails((int) $areaId, $toEmail);
-                $html = $parser->setData([
-                    'list' => $this->buildTicketListHtml($tickets),
-                    'area' => $areaName,
-                ])->renderString($template);
                 $subject = 'MIELL - Folyamatba nem állított munkalapok (' . $areaName . ')';
 
-                $email->clear();
-                $email->setFrom(self::FROM_EMAIL, self::FROM_NAME);
-                $email->setTo($toEmail);
-
-                if (!empty($ccEmails)) {
-                    $email->setCC($ccEmails);
-                }
-
-                $email->setSubject($subject);
-                $email->setMessage($html);
-
-                $sent = $email->send();
-                $recipients = $this->formatRecipients($toEmail, $ccEmails);
-
-                $this->emailLogsModel->add(
-                    self::FROM_EMAIL,
-                    $recipients,
+                $sent = $this->ticketEmailService->sendTemplate(
+                    $toEmail,
+                    $ccEmails,
                     $subject,
-                    strip_tags($html),
-                    $sent ? 1 : 0
+                    self::TEMPLATE_CODE,
+                    [
+                        'list' => $this->buildTicketListHtml($tickets),
+                        'area' => $areaName,
+                    ],
+                    self::FROM_EMAIL,
+                    self::FROM_NAME
                 );
 
                 $this->cliWrite(
@@ -121,15 +99,6 @@ class TodoTasksReminderService
         }
 
         return $grouped;
-    }
-
-    private function getTemplate(): string
-    {
-        $template = $this->emailTemplateModel->getByWhere([
-            'code' => self::TEMPLATE_CODE,
-        ]);
-
-        return $template[0]->data ?? '';
     }
 
     private function getUserEmail(int $userId): ?string
@@ -186,11 +155,6 @@ class TodoTasksReminderService
         }
 
         return $listHtml . '</ul>';
-    }
-
-    private function formatRecipients(string $toEmail, array $ccEmails): string
-    {
-        return $toEmail . (empty($ccEmails) ? '' : ',' . implode(',', $ccEmails));
     }
 
     private function cliWrite(string $message, string $color = 'white'): void
