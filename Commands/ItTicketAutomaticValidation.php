@@ -1,31 +1,20 @@
 <?php
 
-namespace App\Commands;
+namespace App\Modules\ItTickets\Commands;
 
-use App\Models\ItTicketsModel;
+use App\Modules\ItTickets\Services\AutomaticValidationService;
 use CodeIgniter\CLI\BaseCommand;
-use CodeIgniter\CLI\CLI;
-use CodeIgniter\HTTP\CLIRequest;
-
-
-use App\Controllers\AdminBaseController;
-use App\Controllers\It_tickets;
-
-
 
 class ItTicketAutomaticValidation extends BaseCommand
 {
-    protected $group       = 'IT tickets';
-    protected $name        = 'it_tickets:validate';
+    protected $group = 'IT tickets';
+    protected $name = 'it_tickets:validate';
     protected $description = 'Automatic validate IT tickets';
 
-    protected $options =  array(
-    );
-  
+    protected $options = [];
 
-    public function run(array $params)
+    public function run(array $params): void
     {
-        $request = service('CLIRequest');
-        It_tickets::automaticValidation();
+        (new AutomaticValidationService())->run();
     }
 }
