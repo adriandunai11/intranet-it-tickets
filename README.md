@@ -48,6 +48,7 @@ A controller csak HTTP-s belépési pont legyen:
 - view / redirect / JSON response visszaadása.
 
 Az üzleti logika service osztályokba kerüljön.
+Az e-mail sablonozás, küldés és e-mail logolás külön e-mail service feladata.
 
 Commandból nem hívunk controllert. A command csak service-t hívjon.
 
@@ -77,6 +78,7 @@ Services/TicketCommentService.php
 Services/AutomaticValidationService.php
 Services/TicketAssignmentService.php
 Services/TicketStatusService.php
+Services/TicketEmailService.php
 ```
 
 A hozzájuk tartozó commandok már service-t hívnak:
