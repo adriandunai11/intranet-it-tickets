@@ -75,6 +75,7 @@ Services/RecurringTicketService.php
 Services/TicketAttachmentService.php
 Services/TicketCommentService.php
 Services/AutomaticValidationService.php
+Services/TicketAssignmentService.php
 ```
 
 A hozzájuk tartozó commandok már service-t hívnak:
@@ -87,11 +88,12 @@ Commands/GenerateRecurringTickets.php
 Commands/ItTicketAutomaticValidation.php
 ```
 
-A modul controller bridge már service-eket használ az ismétlődő ticket generálásnál, automatikus validálásnál, állomány feltöltés/törlésnél és jegyzet létrehozás/törlésnél.
+A modul controller bridge már service-eket használ az ismétlődő ticket generálásnál, automatikus validálásnál, állomány feltöltés/törlésnél, jegyzet létrehozás/törlésnél, valamint terület és felelős módosításnál.
 
 ## Következő bontási célok
 
 ```txt
+Status módosítás külön TicketStatusService-be
 Controllers/It_tickets.php további bontása kisebb controller/service osztályokra
 Models namespace-ek fokozatos modul alá rendezése
 Views útvonalak modulnézetekre igazítása
