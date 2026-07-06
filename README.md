@@ -71,21 +71,24 @@ Az első automata folyamatok már service osztályokba kerültek:
 Services/ExpiredTicketsNotificationService.php
 Services/ExpiringTicketsNotificationService.php
 Services/TodoTasksReminderService.php
+Services/RecurringTicketService.php
 ```
 
-A hozzájuk tartozó commandok már ezeket hívják:
+A hozzájuk tartozó commandok már service-t hívnak:
 
 ```txt
 Commands/ExpiredTicketsNotification.php
 Commands/ExpiringTicketsNotification.php
 Commands/TodoTasksReminder.php
+Commands/GenerateRecurringTickets.php
 ```
+
+A modul controller bridge már a `RecurringTicketService`-t használja az ismétlődő ticket kézi és automata generálásánál.
 
 ## Következő bontási célok
 
 ```txt
 Services/AutomaticValidationService.php
-Services/RecurringTicketService.php
 Services/TicketAttachmentService.php
 Services/TicketCommentService.php
 ```
