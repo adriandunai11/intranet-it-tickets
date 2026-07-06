@@ -2,26 +2,17 @@
 
 namespace App\Commands;
 
+use App\Services\ExpiredTicketsNotificationService;
 use CodeIgniter\CLI\BaseCommand;
-use CodeIgniter\CLI\CLI;
-use CodeIgniter\HTTP\CLIRequest;
-
-
-use App\Controllers\AdminBaseController;
-use App\Controllers\It_tickets;
-
-
 
 class ExpiredTicketsNotification extends BaseCommand
 {
-    protected $group       = 'IT tickets';
-    protected $name        = 'it_tickets:expired_tickets';
+    protected $group = 'IT tickets';
+    protected $name = 'it_tickets:expired_tickets';
     protected $description = 'Send notification email with expired tickets';
 
-
-    public function run(array $params)
+    public function run(array $params): void
     {
-        $request = service('CLIRequest');
-        It_tickets::expiredTicketsNotification();
+        (new ExpiredTicketsNotificationService())->send();
     }
 }
