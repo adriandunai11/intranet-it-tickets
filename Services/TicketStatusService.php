@@ -2,8 +2,6 @@
 
 namespace App\Modules\ItTickets\Services;
 
-use App\Models\EmailLogsModel;
-use App\Models\EmailTemplateModel;
 use App\Models\ItTicketNotesModel;
 use App\Models\ItTicketsModel;
 use App\Models\UserModel;
@@ -11,26 +9,21 @@ use CodeIgniter\I18n\Time;
 
 class TicketStatusService
 {
-    private const TICKET_URL = 'https://intranet.miellgroup.com/it_tickets/view/';
-
     private ItTicketsModel $ticketsModel;
     private ItTicketNotesModel $notesModel;
     private UserModel $userModel;
-    private EmailTemplateModel $emailTemplateModel;
-    private EmailLogsModel $emailLogsModel;
+    private TicketEmailService $ticketEmailService;
 
     public function __construct(
         ?ItTicketsModel $ticketsModel = null,
         ?ItTicketNotesModel $notesModel = null,
         ?UserModel $userModel = null,
-        ?EmailTemplateModel $emailTemplateModel = null,
-        ?EmailLogsModel $emailLogsModel = null
+        ?TicketEmailService $ticketEmailService = null
     ) {
         $this->ticketsModel = $ticketsModel ?? new ItTicketsModel();
         $this->notesModel = $notesModel ?? new ItTicketNotesModel();
         $this->userModel = $userModel ?? new UserModel();
-        $this->emailTemplateModel = $emailTemplateModel ?? new EmailTemplateModel();
-        $this->emailLogsModel = $emailLogsModel ?? new EmailLogsModel();
+        $this->ticketEmailService = $ticketEmailService ?? new TicketEmailService();
     }
 
     public function changeStatus(int $ticketId, string $status, int $actorId, string $actorAntraId): array
@@ -49,11 +42,7 @@ class TicketStatusService
             'is_validated' => 0,
         ];
 
-        $ccEmails = $this->getParticipantEmails($ticket);
-        $responsibleEmail = $this->getResponsibleCcEmail($ticket);
-        if ($responsibleEmail !== '') {
-            $ccEmails = trim($ccEmails . ', ' . $responsibleEmail, ', ');
-        }
+        $ccEmails = $this->buildCcEmails($ticket);
 
         switch ($status) {
             case 'todo':
@@ -70,7 +59,7 @@ class TicketStatusService
                     $data['project_date'] = new Time('now');
                     $data['project_creator'] = $actorId;
                 }
-                $this->sendStatusEmail($ticket, $ccEmails, 'projektre', 'projekt', 'it_tickets_status_update');
+                $this->ticketEmailService->sendStatusChangeEmail($ticket, $ccEmails, 'projektre', 'projekt', 'it_tickets_status_update');
                 break;
 
             case 'inprogress':
@@ -79,7 +68,7 @@ class TicketStatusService
                     $data['inprogress_date'] = new Time('now');
                     $data['inprogress_creator'] = $actorId;
                 }
-                $this->sendStatusEmail($ticket, $ccEmails, 'folyamatbanra', 'folyamatban', 'it_tickets_status_update');
+                $this->ticketEmailService->sendStatusChangeEmail($ticket, $ccEmails, 'folyamatbanra', 'folyamatban', 'it_tickets_status_update');
                 break;
 
             case 'waiting_for_sender':
@@ -88,7 +77,7 @@ class TicketStatusService
                     $data['waiting_date'] = new Time('now');
                     $data['waiting_creator'] = $actorId;
                 }
-                $this->sendStatusEmail($ticket, $ccEmails, 'bejelentő válaszára vár értékre', 'bejelentő válaszára vár', 'it_tickets_status_update');
+                $this->ticketEmailService->sendStatusChangeEmail($ticket, $ccEmails, 'bejelentő válaszára vár értékre', 'bejelentő válaszára vár', 'it_tickets_status_update');
                 break;
 
             case 'finished':
@@ -98,7 +87,7 @@ class TicketStatusService
                     $data['finished_creator'] = $actorId;
                 }
                 $data['sent_to_validation'] = new Time('now');
-                $this->sendStatusEmail($ticket, $ccEmails, 'befejezettre', 'befejezett', 'it_tickets_send_to_validation');
+                $this->ticketEmailService->sendStatusChangeEmail($ticket, $ccEmails, 'befejezettre', 'befejezett', 'it_tickets_send_to_validation');
                 break;
         }
 
@@ -122,6 +111,23 @@ class TicketStatusService
             'creator' => 0,
             'created' => new Time('now'),
         ]);
+    }
+
+    private function buildCcEmails(object $ticket): string
+    {
+        $emails = [];
+        $participantEmails = $this->getParticipantEmails($ticket);
+
+        if ($participantEmails !== '') {
+            $emails[] = $participantEmails;
+        }
+
+        $responsibleEmail = $this->getResponsibleCcEmail($ticket);
+        if ($responsibleEmail !== '') {
+            $emails[] = $responsibleEmail;
+        }
+
+        return implode(', ', $emails);
     }
 
     private function getParticipantEmails(object $ticket): string
@@ -155,56 +161,5 @@ class TicketStatusService
         }
 
         return (string) $this->userModel->getRowById($ticket->responsible, 'email');
-    }
-
-    private function sendStatusEmail(object $ticket, string $ccEmails, string $statusText, string $subjectSuffix, string $templateCode): void
-    {
-        $emailData = getEmailShortCodes();
-        $emailData['name'] = $this->userModel->getRowById($ticket->sender_id, 'name');
-        $emailData['task_number'] = '<a href="' . self::TICKET_URL . $ticket->id . '">' . $ticket->task_number . '</a> (' . $ticket->name . ')';
-        $emailData['link'] = self::TICKET_URL . $ticket->id;
-        $emailData['status'] = $statusText;
-
-        $template = $this->emailTemplateModel->getByWhere([
-            'code' => $templateCode,
-        ]);
-
-        $html = \Config\Services::parser()
-            ->setData($emailData)
-            ->renderString($template[0]->data ?? '');
-
-        $this->sendEmail(
-            $ticket->email,
-            $ccEmails,
-            'MIELL munkalap: ' . $ticket->task_number . ' - ' . $subjectSuffix,
-            $html
-        );
-    }
-
-    private function sendEmail($to, string $cc, string $subject, string $html): bool
-    {
-        $email = \Config\Services::email();
-        $email->clear();
-        $email->setFrom(setting('company_email'), setting('company_name'));
-        $email->setTo($to);
-
-        if ($cc !== '') {
-            $email->setCC($cc);
-        }
-
-        $email->setSubject($subject);
-        $email->setMessage($html);
-
-        $sent = $email->send();
-
-        $this->emailLogsModel->add(
-            setting('company_email'),
-            (string) $to,
-            $subject,
-            strip_tags($html),
-            $sent ? 1 : 0
-        );
-
-        return $sent;
     }
 }
