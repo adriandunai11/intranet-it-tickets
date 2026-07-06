@@ -5,6 +5,7 @@ namespace App\Modules\ItTickets\Controllers;
 use App\Models\ItTicketsModel;
 use App\Modules\ItTickets\Services\AutomaticValidationService;
 use App\Modules\ItTickets\Services\RecurringTicketService;
+use App\Modules\ItTickets\Services\TicketAssignmentService;
 use App\Modules\ItTickets\Services\TicketAttachmentService;
 use App\Modules\ItTickets\Services\TicketCommentService;
 
@@ -40,6 +41,59 @@ class ItTicketsController extends \App\Controllers\It_tickets
         (new RecurringTicketService())->generateDueTasks();
 
         return redirect()->to('it_tickets')->with('sSuccess', 'Ismétlődő feladatok generálása lefutott.');
+    }
+
+    public function selectResponsibleAjax()
+    {
+        postAllowed();
+
+        $ticketId = (int) post('ticketId');
+        $responsibleId = (int) post('responsible');
+        $ticket = (new ItTicketsModel())->getById($ticketId);
+        $perm = getTicketPermissions($ticket);
+
+        if (empty($perm['can_edit_responsible'])) {
+            return $this->response->setJSON([
+                'status' => 'error',
+                'message' => 'Nincs jogosultságod felelőst módosítani ezen a jegyen.',
+            ]);
+        }
+
+        $result = (new TicketAssignmentService())->changeResponsible(
+            $ticketId,
+            $responsibleId,
+            (int) logged('id'),
+            (string) logged('antraid')
+        );
+
+        return $this->response->setJSON($result);
+    }
+
+    public function selectAreaAjax()
+    {
+        postAllowed();
+
+        $ticketId = (int) post('ticketId');
+        $newAreaId = (int) post('edit_area');
+        $ticket = (new ItTicketsModel())->getById($ticketId);
+        $perm = getTicketPermissions($ticket);
+
+        if (empty($perm['can_edit_area'])) {
+            return $this->response->setJSON([
+                'status' => 'error',
+                'message' => 'Nincs jogosultságod területet módosítani ezen a jegyen.',
+            ]);
+        }
+
+        $result = (new TicketAssignmentService())->changeArea(
+            $ticketId,
+            $newAreaId,
+            (int) logged('id'),
+            (string) logged('name'),
+            (string) logged('antraid')
+        );
+
+        return $this->response->setJSON($result);
     }
 
     public function addComment($ticket_id)
