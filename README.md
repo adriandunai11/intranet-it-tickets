@@ -51,6 +51,7 @@ Az üzleti logika service osztályokba kerüljön.
 Az e-mail sablonozás, küldés és e-mail logolás külön e-mail service feladata.
 
 Commandból nem hívunk controllert. A command csak service-t hívjon.
+A command mögötti service sem küldhet közvetlenül e-mailt `Config\\Services::email()` vagy saját `EmailLogsModel` használattal; erre a `TicketEmailService` való.
 
 Jó irány:
 
@@ -89,6 +90,15 @@ Commands/ExpiringTicketsNotification.php
 Commands/TodoTasksReminder.php
 Commands/GenerateRecurringTickets.php
 Commands/ItTicketAutomaticValidation.php
+```
+
+A commandok mögötti e-mailes folyamatok már a közös `TicketEmailService`-en keresztül küldenek:
+
+```txt
+ExpiredTicketsNotificationService
+ExpiringTicketsNotificationService
+TodoTasksReminderService
+AutomaticValidationService
 ```
 
 A modul controller bridge már service-eket használ az ismétlődő ticket generálásnál, automatikus validálásnál, állomány feltöltés/törlésnél, jegyzet létrehozás/törlésnél, terület és felelős módosításnál, valamint státusz módosításnál.
