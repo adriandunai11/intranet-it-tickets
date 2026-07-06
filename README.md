@@ -15,19 +15,19 @@ Views/
 
 ## Controller állapot
 
-Jelenleg csak egy controller fájl maradt:
+Jelenleg egy controller fájl maradt:
 
 ```txt
 Controllers/It_tickets.php
 ```
 
-A korábbi bridge controller törölve lett:
+A korábbi bridge controller nincs használatban / törölve lett:
 
 ```txt
 Controllers/ItTicketsController.php
 ```
 
-A route-ok átmenetileg közvetlenül erre az egy controllerre mutatnak:
+A route-ok közvetlenül erre az egy controllerre mutatnak:
 
 ```php
 $routes->group('it_tickets', [
@@ -37,8 +37,6 @@ $routes->group('it_tickets', [
     $routes->get('/', 'It_tickets::index');
 });
 ```
-
-Ez azért átmeneti, mert a nagy controller teljes modul-namespace alá mozgatásához a teljes fájlt biztonságosan kell átírni. Addig nem maradhat két, egymást öröklő controller.
 
 ## OOP rendezési elv
 
@@ -70,7 +68,32 @@ Services/TicketStatusService.php
 Services/TicketEmailService.php
 ```
 
-A hozzájuk tartozó commandok már service-t hívnak:
+## Controllerből service-re kötött részek
+
+A `Controllers/It_tickets.php` már ezeket a service-eket hívja:
+
+```txt
+selectResponsibleAjax()      -> TicketAssignmentService::changeResponsible()
+selectAreaAjax()             -> TicketAssignmentService::changeArea()
+updateTicketStatusAjax()     -> TicketStatusService::changeStatus()
+addComment()                 -> TicketCommentService::add()
+deleteComment()              -> TicketCommentService::delete()
+addAttachment()              -> TicketAttachmentService::uploadMultiple()
+deleteAttachment()           -> TicketAttachmentService::delete()
+automaticValidation()        -> AutomaticValidationService::run()
+expiringTicketsNotification()-> ExpiringTicketsNotificationService::send()
+expiredTicketsNotification() -> ExpiredTicketsNotificationService::send()
+todoTasksReminder()          -> TodoTasksReminderService::send()
+runRecurringTaskNow()        -> RecurringTicketService::generateOne()
+generateRecurringTasks()     -> RecurringTicketService::generateDueTasks()
+testRecurringTasks()         -> RecurringTicketService::generateDueTasks()
+```
+
+A controller privát `sendEmail()` metódusa is a közös `TicketEmailService`-en keresztül küld.
+
+## Command állapot
+
+A commandok már service-t hívnak:
 
 ```txt
 Commands/ExpiredTicketsNotification.php
@@ -89,11 +112,14 @@ TodoTasksReminderService
 AutomaticValidationService
 ```
 
+## Ellenőrzés
+
+A módosított PHP fájlok szintaktikailag ellenőrizve lettek `php -l` paranccsal.
+
 ## Következő bontási célok
 
 ```txt
-It_tickets controller metódusainak célzott service-re kötése
-Ticket view/update/validate folyamatok service-be húzása
+Ticket view/update/validate folyamatok külön service-be húzása
 List/datatable query és formatter szétválasztása
 Models namespace-ek fokozatos modul alá rendezése
 Views útvonalak modulnézetekre igazítása
