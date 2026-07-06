@@ -24,6 +24,24 @@ class TicketEmailService
         $this->userModel = $userModel ?? new UserModel();
     }
 
+    public function renderTemplate(string $templateCode, array $data): string
+    {
+        $template = $this->emailTemplateModel->getByWhere([
+            'code' => $templateCode,
+        ]);
+
+        return \Config\Services::parser()
+            ->setData($data)
+            ->renderString($template[0]->data ?? '');
+    }
+
+    public function sendTemplate($to, $cc, string $subject, string $templateCode, array $data): bool
+    {
+        $html = $this->renderTemplate($templateCode, $data);
+
+        return $this->send($to, $cc, $subject, $html);
+    }
+
     public function sendStatusChangeEmail(object $ticket, string $ccEmails, string $statusText, string $subjectSuffix, string $templateCode): bool
     {
         $emailData = getEmailShortCodes();
@@ -32,30 +50,23 @@ class TicketEmailService
         $emailData['link'] = self::TICKET_URL . $ticket->id;
         $emailData['status'] = $statusText;
 
-        $template = $this->emailTemplateModel->getByWhere([
-            'code' => $templateCode,
-        ]);
-
-        $html = \Config\Services::parser()
-            ->setData($emailData)
-            ->renderString($template[0]->data ?? '');
-
-        return $this->send(
+        return $this->sendTemplate(
             $ticket->email,
             $ccEmails,
             'MIELL munkalap: ' . $ticket->task_number . ' - ' . $subjectSuffix,
-            $html
+            $templateCode,
+            $emailData
         );
     }
 
-    public function send($to, ?string $cc, string $subject, string $html): bool
+    public function send($to, $cc, string $subject, string $html): bool
     {
         $email = \Config\Services::email();
         $email->clear();
         $email->setFrom(setting('company_email'), setting('company_name'));
         $email->setTo($to);
 
-        if ($cc) {
+        if (!empty($cc)) {
             $email->setCC($cc);
         }
 
@@ -66,12 +77,25 @@ class TicketEmailService
 
         $this->emailLogsModel->add(
             setting('company_email'),
-            is_array($to) ? implode(',', $to) : (string) $to,
+            $this->formatRecipients($to, $cc),
             $subject,
             strip_tags($html),
             $sent ? 1 : 0
         );
 
         return $sent;
+    }
+
+    private function formatRecipients($to, $cc): string
+    {
+        $toList = is_array($to) ? implode(',', $to) : (string) $to;
+
+        if (empty($cc)) {
+            return $toList;
+        }
+
+        $ccList = is_array($cc) ? implode(',', $cc) : (string) $cc;
+
+        return $toList . ',' . $ccList;
     }
 }
