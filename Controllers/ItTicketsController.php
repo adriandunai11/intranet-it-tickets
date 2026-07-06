@@ -2,7 +2,9 @@
 
 namespace App\Modules\ItTickets\Controllers;
 
+use App\Models\ItTicketsModel;
 use App\Modules\ItTickets\Services\RecurringTicketService;
+use App\Modules\ItTickets\Services\TicketAttachmentService;
 
 class ItTicketsController extends \App\Controllers\It_tickets
 {
@@ -31,5 +33,69 @@ class ItTicketsController extends \App\Controllers\It_tickets
         (new RecurringTicketService())->generateDueTasks();
 
         return redirect()->to('it_tickets')->with('sSuccess', 'Ismétlődő feladatok generálása lefutott.');
+    }
+
+    public function addAttachment($ticket_id)
+    {
+        $ticketId = (int) $ticket_id;
+        $ticket = (new ItTicketsModel())->getById($ticketId);
+        $perm = getTicketPermissions($ticket);
+
+        if (empty($perm['can_add_comment_or_file'])) {
+            return $this->response->redirect('/errors/denied');
+        }
+
+        postAllowed();
+
+        if (!$this->validate([
+            'files' => [
+                'max_size[files,25600]',
+            ],
+        ])) {
+            return redirect()->to('it_tickets/view/' . $ticketId)
+                ->withInput()
+                ->with('validation_add_attachment', $this->validator->getErrors());
+        }
+
+        $files = $this->request->getFileMultiple('files');
+        $uploaded = (new TicketAttachmentService())->uploadMultiple(
+            $ticketId,
+            $files ?: [],
+            (int) logged('id')
+        );
+
+        if ($uploaded) {
+            return redirect()->to('it_tickets/view/' . $ticketId)
+                ->with('sSuccess', 'Sikeres állomány feltöltés.');
+        }
+
+        return redirect()->to('it_tickets/view/' . $ticketId)
+            ->with('sError', 'Valami hiba történt. Kérlek, hogy jelezd az IT osztály felé.');
+    }
+
+    public function deleteAttachment($id)
+    {
+        $attachmentId = (int) $id;
+        $service = new TicketAttachmentService();
+        $attachment = $service->find($attachmentId);
+
+        if (!$attachment) {
+            return redirect()->to('it_tickets');
+        }
+
+        if ((int) $attachment->uploader !== (int) logged('id') && !hasPermissions('manage_it_tickets')) {
+            return $this->response->redirect('/errors/denied');
+        }
+
+        $result = $service->delete($attachmentId);
+        $ticketId = (int) ($result['ticket_id'] ?? $attachment->ticket_id);
+
+        if ($result['status']) {
+            return redirect()->to('it_tickets/view/' . $ticketId)
+                ->with('sSuccess', $result['message']);
+        }
+
+        return redirect()->to('it_tickets/view/' . $ticketId)
+            ->with('sError', 'Valami hiba történt. Kérlek, hogy jelezd az IT osztály felé.');
     }
 }
