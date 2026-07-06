@@ -35,11 +35,11 @@ class TicketEmailService
             ->renderString($template[0]->data ?? '');
     }
 
-    public function sendTemplate($to, $cc, string $subject, string $templateCode, array $data): bool
+    public function sendTemplate($to, $cc, string $subject, string $templateCode, array $data, ?string $fromEmail = null, ?string $fromName = null): bool
     {
         $html = $this->renderTemplate($templateCode, $data);
 
-        return $this->send($to, $cc, $subject, $html);
+        return $this->send($to, $cc, $subject, $html, $fromEmail, $fromName);
     }
 
     public function sendStatusChangeEmail(object $ticket, string $ccEmails, string $statusText, string $subjectSuffix, string $templateCode): bool
@@ -59,11 +59,14 @@ class TicketEmailService
         );
     }
 
-    public function send($to, $cc, string $subject, string $html): bool
+    public function send($to, $cc, string $subject, string $html, ?string $fromEmail = null, ?string $fromName = null): bool
     {
+        $fromEmail = $fromEmail ?: setting('company_email');
+        $fromName = $fromName ?: setting('company_name');
+
         $email = \Config\Services::email();
         $email->clear();
-        $email->setFrom(setting('company_email'), setting('company_name'));
+        $email->setFrom($fromEmail, $fromName);
         $email->setTo($to);
 
         if (!empty($cc)) {
@@ -76,7 +79,7 @@ class TicketEmailService
         $sent = $email->send();
 
         $this->emailLogsModel->add(
-            setting('company_email'),
+            $fromEmail,
             $this->formatRecipients($to, $cc),
             $subject,
             strip_tags($html),
